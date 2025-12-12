@@ -381,14 +381,7 @@ async def detect_conversation_language(
     """Detect the primary language in the conversation (excluding user's messages)."""
     logger.debug("[OpenAI] Starting conversation language detection")
 
-    # Filter to only other participants' messages
-    other_messages = [msg for msg in previous_messages if not msg["is_outgoing"]]
-    if not other_messages:
-        logger.debug("[OpenAI] No messages from other participants to analyze")
-        return None
-
-    context_lines = [str(msg["text"]) for msg in other_messages]
-    context_block = "\n---\n".join(context_lines)
+    context_block = format_conversation_context(previous_messages)
 
     try:
         response = await clients.openai_client.beta.chat.completions.parse(
@@ -397,13 +390,14 @@ async def detect_conversation_language(
                 {
                     "role": "system",
                     "content": (
-                        "You analyze messages to determine the primary language being used. "
-                        "Return the language these messages are written in."
+                        "You analyze conversation context to determine the primary language used by other participants. "
+                        "Messages from the current user are prefixed with '(YOU)' - exclude these when identifying the language. "
+                        "Focus on what language the other people in the conversation are writing in."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": f"Messages to analyze:\n{context_block}",
+                    "content": f"Conversation history:\n{context_block}",
                 },
             ],
             response_format=ConversationLanguage,
