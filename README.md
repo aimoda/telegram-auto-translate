@@ -1,5 +1,7 @@
 # Telegram Auto-Translate
 
+[![PyPI version](https://img.shields.io/pypi/v/telegram-auto-translate.svg)](https://pypi.org/project/telegram-auto-translate/)
+
 **A Telegram userbot that automatically translates your outgoing messages using conversation context.**
 
 ---
@@ -20,14 +22,27 @@ Your message → Detect languages → Translate with Claude → Clean output →
 
 ---
 
+## Installation
+
+### Via PyPI (Recommended)
+
+```bash
+pip install telegram-auto-translate
+```
+
+### From Source
+
+```bash
+git clone https://github.com/aimoda/telegram-auto-translate
+cd telegram-auto-translate
+pip install -e .
+```
+
+---
+
 ## Quick Start
 
 ```bash
-# Clone and setup
-git clone <repo-url> && cd telegram-auto-translate
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-
 # Set required environment variables
 # Get TG_API_ID and TG_API_HASH from https://my.telegram.org/apps
 export TG_API_ID="your_api_id"
@@ -36,7 +51,7 @@ export BEDROCK_AWS_PROFILE="your_aws_profile"
 export OPENAI_API_KEY="your_azure_openai_key"
 
 # Run
-./main.py
+telegram-auto-translate
 ```
 
 On first run, Telethon will prompt for your phone number and login code.
@@ -146,7 +161,7 @@ export OPENAI_BASE_URL="https://api.openai.com/v1"
 ## Usage
 
 ```bash
-./main.py [options]
+telegram-auto-translate [options]
 ```
 
 ### Command-Line Flags
@@ -186,17 +201,17 @@ export OPENAI_BASE_URL="https://api.openai.com/v1"
 
 **Test without editing messages:**
 ```bash
-./main.py --dry-run --debug
+telegram-auto-translate --dry-run --debug
 ```
 
 **Use more context for better translations:**
 ```bash
-./main.py --context-messages 20
+telegram-auto-translate --context-messages 20
 ```
 
 **Use standard OpenAI API:**
 ```bash
-OPENAI_BASE_URL="https://api.openai.com/v1" ./main.py
+OPENAI_BASE_URL="https://api.openai.com/v1" telegram-auto-translate
 ```
 
 ---
