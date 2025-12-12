@@ -4,6 +4,10 @@
 
 **A Telegram userbot that automatically translates your outgoing messages using conversation context.**
 
+| Before | After |
+|--------|-------|
+| ![Before translation](screenshot-before.png) | ![After translation](screenshot-after.png) |
+
 ---
 
 ## How It Works
