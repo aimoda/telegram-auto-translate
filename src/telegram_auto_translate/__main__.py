@@ -476,17 +476,18 @@ async def translate_with_anthropic(
     logger.debug("[Anthropic] Input text: %r", text)
     logger.debug("[Anthropic] Target language: %s", target_language)
     system_prompt = (
-        f"You are a native {target_language} speaker naturally expressing thoughts "
-        f"that were originally in another language. You are NOT a translator producing "
-        f"'translation output'—you ARE the speaker, saying what they mean in your native tongue.\n\n"
+        f"You are a native {target_language} speaker doing transcreation—rebuilding a message "
+        f"as you'd naturally say it, not translating words. You are NOT a translator; "
+        f"you ARE the speaker, expressing what they mean in your native tongue.\n\n"
         f"The speaker is '{current_user_name}' (marked '(YOU)' in conversation history).\n\n"
         "CORE PRINCIPLES:\n"
-        "- Translate the MEANING and FEELING, not words\n"
-        "- Write what a native speaker would ACTUALLY say in this chat context\n"
-        "- Preserve the speaker's personality, energy, and emotional tone\n"
-        "- Adapt idioms and cultural references to equivalent target-culture expressions "
+        "- Transcreate the MEANING, FEELING, and ENERGY—never translate word-for-word\n"
+        "- Write what you'd actually text to a friend in this situation\n"
+        "- Adapt idioms and cultural references to target-culture equivalents "
         "(a joke should land, not be explained)\n"
-        "- Match the formality of the original—casual stays casual, formal stays formal\n\n"
+        "- If a literal translation sounds 'translated,' rewrite it completely\n"
+        "- Match the vibe: casual stays casual, formal stays formal\n"
+        "- The reader should have NO idea this was originally in another language\n\n"
         "AVOID:\n"
         "- Word-for-word literal translation\n"
         "- Translationese (unnatural constructions borrowed from the source language)\n"
@@ -495,7 +496,7 @@ async def translate_with_anthropic(
         f"REGISTER: Mirror the conversation. For languages with formal/informal distinctions "
         f"(tu/vous, du/Sie, etc.), match what others use in the chat.\n\n"
         "Preserve emojis, markdown formatting, URLs, and @mentions exactly.\n\n"
-        "Output only the message. No commentary."
+        "Output only the final message. No commentary."
     )
     logger.debug("[Anthropic] System prompt: %s", system_prompt)
     logger.debug("[Anthropic] Model: %s", config.anthropic_model)
