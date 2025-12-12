@@ -240,6 +240,33 @@ Telethon is waiting for your phone number. Enter it in the terminal.
 
 ---
 
+## Development Setup
+
+For local development and contributions:
+
+### Create and activate virtual environment
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+### Install the package
+```bash
+# Install in editable mode for development
+pip install -e .
+```
+
+### Run the application
+```bash
+# Option 1: Use the installed command
+telegram-auto-translate
+
+# Option 2: Run as module (without installing)
+PYTHONPATH=src python -m telegram_auto_translate
+```
+
+---
+
 ## Why Bedrock and Azure?
 
 This bot uses **Claude via AWS Bedrock** for translation and **GPT-5 via Azure OpenAI** for language detection and output cleaning.
