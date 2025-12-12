@@ -88,6 +88,35 @@ class UserMessageLanguage(BaseModel):
     confidence: Confidence = Field(description="Confidence in the detection")
 
 
+@dataclass
+class ContextMessage:
+    """A single message in conversation context."""
+    sender: str
+    text: str
+    is_outgoing: bool
+
+    def format(self) -> str:
+        prefix = "(YOU) " if self.is_outgoing else ""
+        return f"{prefix}[{self.sender}]: {self.text}"
+
+
+@dataclass
+class ConversationContext:
+    """Context for translation including message history and reply info."""
+    messages: list[ContextMessage]
+    reply_to_sender: str | None = None
+    reply_to_text: str | None = None
+
+    def format(self) -> str:
+        """Format context as plaintext for LLM consumption."""
+        lines = []
+        if self.reply_to_sender is not None:
+            lines.append(f">>> REPLYING TO [{self.reply_to_sender}]: {self.reply_to_text}")
+            lines.append("")
+        lines.extend(msg.format() for msg in self.messages)
+        return "\n".join(lines)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Telegram auto-translation userbot")
     use_token_provider_default = os.getenv("OPENAI_USE_TOKEN_PROVIDER", "").lower() in (
@@ -255,13 +284,24 @@ def should_skip_message(text: str) -> bool:
     return not text.strip()
 
 
-def format_conversation_context(messages: list[dict[str, str | bool]]) -> str:
-    """Format messages into a context block with (YOU) prefix for outgoing messages."""
-    lines = []
-    for msg in messages:
-        prefix = "(YOU) " if msg["is_outgoing"] else ""
-        lines.append(f"{prefix}[{msg['sender']}]: {msg['text']}")
-    return "\n".join(lines)
+_MEDIA_ATTRS = (
+    ('photo', '[Photo]'),
+    ('video', '[Video]'),
+    ('sticker', '[Sticker]'),
+    ('voice', '[Voice message]'),
+    ('document', '[Document]'),
+    ('audio', '[Audio]'),
+)
+
+
+def get_message_text_or_description(msg: object) -> str:
+    """Get text or descriptive placeholder for any message type."""
+    if text := getattr(msg, 'text', None) or getattr(msg, 'message', None):
+        return str(text)
+    for attr, desc in _MEDIA_ATTRS:
+        if getattr(msg, attr, None):
+            return desc
+    return "[Media]"
 
 
 def format_sender_name(sender: object) -> str:
@@ -293,36 +333,42 @@ def format_sender_name(sender: object) -> str:
     return "Unknown"
 
 
-async def fetch_previous_messages(
+async def build_conversation_context(
     event: events.NewMessage.Event,
     limit: int = 10,
-) -> list[dict[str, str | bool]]:
-    """Fetch previous messages from the chat for translation context."""
-    client = event.client
-    if client is None:
-        return []
+) -> ConversationContext:
+    """Build conversation context including previous messages and reply info."""
+    messages: list[ContextMessage] = []
+    reply_to_sender: str | None = None
+    reply_to_text: str | None = None
 
-    previous = await client.get_messages(
-        event.chat_id,
-        limit=limit,
-        max_id=event.id,  # Exclude current message
-    )
+    if event.client is not None:
+        previous = await event.client.get_messages(event.chat_id, limit=limit, max_id=event.id)
+        for msg in reversed(previous):  # Oldest first
+            if msg and msg.message:
+                sender_entity = await msg.get_sender()
+                sender = format_sender_name(sender_entity) if sender_entity else "Unknown"
+                messages.append(ContextMessage(sender, msg.message, bool(msg.out)))
 
-    context: list[dict[str, str | bool]] = []
-    for msg in reversed(previous):  # Oldest first
-        if msg and msg.message:
-            sender_entity = await msg.get_sender()
-            sender = format_sender_name(sender_entity) if sender_entity else "Unknown"
-            context.append({
-                "sender": sender,
-                "text": msg.message,
-                "is_outgoing": bool(msg.out),
-            })
-    return context
+    if event.is_reply:
+        try:
+            replied_msg = await event.get_reply_message()
+            if replied_msg is None:
+                reply_to_sender, reply_to_text = "Unknown", "[deleted message]"
+            else:
+                sender = await replied_msg.get_sender()
+                reply_to_sender = format_sender_name(sender) if sender else "Unknown"
+                reply_to_text = get_message_text_or_description(replied_msg)
+                if len(reply_to_text) > 200:
+                    reply_to_text = reply_to_text[:200] + "..."
+        except Exception as exc:
+            logger.warning("Failed to fetch reply context: %s", exc)
+
+    return ConversationContext(messages, reply_to_sender, reply_to_text)
 
 
 async def detect_reply_target_language(
-    previous_messages: list[dict[str, str | bool]],
+    context: ConversationContext,
     current_text: str,
     current_user_name: str,
     config: AppConfig,
@@ -331,7 +377,7 @@ async def detect_reply_target_language(
     """Detect the language of the person the user is likely replying to."""
     logger.debug("[OpenAI] Starting reply target language detection")
 
-    context_block = format_conversation_context(previous_messages)
+    context_block = context.format()
 
     try:
         response = await clients.openai_client.beta.chat.completions.parse(
@@ -342,6 +388,7 @@ async def detect_reply_target_language(
                     "content": (
                         f"You analyze conversation context to determine what language to translate the user's message into. "
                         f"The user is '{current_user_name}' and their messages are prefixed with '(YOU)'. "
+                        "Lines starting with '>>> REPLYING TO' indicate the specific message the user is responding to. "
                         "Look at the conversation history and the user's new message to determine who they are likely replying to. "
                         "Return the language that person uses. If it's unclear who they're replying to, return null for target_language with low confidence."
                     ),
@@ -374,14 +421,14 @@ async def detect_reply_target_language(
 
 
 async def detect_conversation_language(
-    previous_messages: list[dict[str, str | bool]],
+    context: ConversationContext,
     config: AppConfig,
     clients: Clients,
 ) -> ConversationLanguage | None:
     """Detect the primary language in the conversation (excluding user's messages)."""
     logger.debug("[OpenAI] Starting conversation language detection")
 
-    context_block = format_conversation_context(previous_messages)
+    context_block = context.format()
 
     try:
         response = await clients.openai_client.beta.chat.completions.parse(
@@ -470,7 +517,7 @@ async def translate_with_anthropic(
     current_user_name: str,
     config: AppConfig,
     clients: Clients,
-    previous_messages: list[dict[str, str | bool]],
+    context: ConversationContext,
 ) -> str:
     logger.debug("[Anthropic] Starting translation request")
     logger.debug("[Anthropic] Input text: %r", text)
@@ -479,7 +526,8 @@ async def translate_with_anthropic(
         f"You are a native {target_language} speaker doing transcreation—rebuilding a message "
         f"as you'd naturally say it, not translating words. You are NOT a translator; "
         f"you ARE the speaker, expressing what they mean in your native tongue.\n\n"
-        f"The speaker is '{current_user_name}' (marked '(YOU)' in conversation history).\n\n"
+        f"The speaker is '{current_user_name}' (marked '(YOU)' in conversation history).\n"
+        "Lines starting with '>>> REPLYING TO' indicate the specific message the user is responding to.\n\n"
         "CORE PRINCIPLES:\n"
         "- Transcreate the MEANING, FEELING, and ENERGY—never translate word-for-word\n"
         "- Write what you'd actually text to a friend in this situation\n"
@@ -501,9 +549,9 @@ async def translate_with_anthropic(
     logger.debug("[Anthropic] System prompt: %s", system_prompt)
     logger.debug("[Anthropic] Model: %s", config.anthropic_model)
 
-    context_block = format_conversation_context(previous_messages)
+    context_block = context.format()
     content = f"Conversation so far:\n\n{context_block}\n\n---\n\nNow express this in {target_language}:\n\n{text}"
-    logger.debug("[Anthropic] Including %d context messages", len(previous_messages))
+    logger.debug("[Anthropic] Including %d context messages", len(context.messages))
 
     response = await clients.anthropic_client.messages.create(
         model=config.anthropic_model,
@@ -615,12 +663,14 @@ async def handle_outgoing_message(
     current_user_name = format_sender_name(me) if me else "Me"
     logger.debug("[Handler] Current user: %s", current_user_name)
 
-    # Fetch previous messages for context
-    previous_messages = await fetch_previous_messages(event, limit=config.context_messages)
-    logger.debug("[Handler] Fetched %d previous messages for context", len(previous_messages))
+    # Build conversation context (previous messages + reply info)
+    context = await build_conversation_context(event, limit=config.context_messages)
+    logger.debug("[Handler] Built context with %d messages", len(context.messages))
+    if context.reply_to_sender is not None:
+        logger.debug("[Handler] Message is reply to [%s]: %s", context.reply_to_sender, context.reply_to_text)
 
     # Skip if no previous messages to analyze
-    if not previous_messages:
+    if not context.messages:
         logger.debug("[Handler] No previous messages, skipping translation")
         return
 
@@ -628,7 +678,7 @@ async def handle_outgoing_message(
     target_language: str | None = None
 
     conversation_task = asyncio.create_task(
-        detect_conversation_language(previous_messages, config, clients)
+        detect_conversation_language(context, config, clients)
     )
     user_language_task = asyncio.create_task(
         detect_user_message_language(text, config, clients)
@@ -636,7 +686,7 @@ async def handle_outgoing_message(
 
     # First, try to detect based on who user is replying to
     reply_detection = await detect_reply_target_language(
-        previous_messages, text, current_user_name, config, clients
+        context, text, current_user_name, config, clients
     )
     if reply_detection and reply_detection.target_language:
         if reply_detection.confidence in (Confidence.HIGH, Confidence.MEDIUM):
@@ -688,7 +738,7 @@ async def handle_outgoing_message(
     logger.debug("[Handler] Processing message for translation")
     try:
         translated = await translate_with_anthropic(
-            text, target_language, current_user_name, config, clients, previous_messages
+            text, target_language, current_user_name, config, clients, context
         )
     except Exception as exc:
         logger.error("Translation failed: %s", exc)
