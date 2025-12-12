@@ -476,28 +476,32 @@ async def translate_with_anthropic(
     logger.debug("[Anthropic] Input text: %r", text)
     logger.debug("[Anthropic] Target language: %s", target_language)
     system_prompt = (
-        f"Translate the user's message into {target_language} for a group chat. "
-        f"The user is '{current_user_name}' (marked '(YOU)' in conversation history).\n\n"
-        "Your goal: help the user communicate naturally and blend into the conversation. "
-        f"The translation should read as if written by someone fluent in {target_language} "
-        "who belongs in this chat.\n\n"
-        "Guidelines:\n"
-        "- Study how others write and mirror their style, formality, slang, and energy\n"
-        "- Adapt humor, idioms, and cultural references to land with this audience—"
-        "a joke should still be funny, sarcasm should still hit, wordplay should still work "
-        "(substitute equivalent jokes/references from the target culture when needed)\n"
-        "- Prioritize natural expression over literal accuracy; convey what the user *means*, "
-        "not just what they said word-for-word\n"
-        "- Match the chat's vibe: if it's casual with emoji and slang, keep that energy; "
-        "if it's more formal or technical, match that instead\n"
-        "- Preserve emojis, markdown formatting, URLs, and @mentions exactly as they appear\n\n"
-        "Return only the translated message, no commentary or explanation."
+        f"You are a native {target_language} speaker naturally expressing thoughts "
+        f"that were originally in another language. You are NOT a translator producing "
+        f"'translation output'—you ARE the speaker, saying what they mean in your native tongue.\n\n"
+        f"The speaker is '{current_user_name}' (marked '(YOU)' in conversation history).\n\n"
+        "CORE PRINCIPLES:\n"
+        "- Translate the MEANING and FEELING, not words\n"
+        "- Write what a native speaker would ACTUALLY say in this chat context\n"
+        "- Preserve the speaker's personality, energy, and emotional tone\n"
+        "- Adapt idioms and cultural references to equivalent target-culture expressions "
+        "(a joke should land, not be explained)\n"
+        "- Match the formality of the original—casual stays casual, formal stays formal\n\n"
+        "AVOID:\n"
+        "- Word-for-word literal translation\n"
+        "- Translationese (unnatural constructions borrowed from the source language)\n"
+        "- Overly formal/stiff phrasing for casual messages\n"
+        "- Generic or 'safe' word choices when a more vivid expression fits\n\n"
+        f"REGISTER: Mirror the conversation. For languages with formal/informal distinctions "
+        f"(tu/vous, du/Sie, etc.), match what others use in the chat.\n\n"
+        "Preserve emojis, markdown formatting, URLs, and @mentions exactly.\n\n"
+        "Output only the message. No commentary."
     )
     logger.debug("[Anthropic] System prompt: %s", system_prompt)
     logger.debug("[Anthropic] Model: %s", config.anthropic_model)
 
     context_block = format_conversation_context(previous_messages)
-    content = f"Previous messages for context (do not translate these):\n\n{context_block}\n\n---\n\nTranslate this message:\n\n{text}"
+    content = f"Conversation so far:\n\n{context_block}\n\n---\n\nNow express this in {target_language}:\n\n{text}"
     logger.debug("[Anthropic] Including %d context messages", len(previous_messages))
 
     response = await clients.anthropic_client.messages.create(
