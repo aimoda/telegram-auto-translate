@@ -343,7 +343,13 @@ async def build_conversation_context(
     reply_to_text: str | None = None
 
     if event.client is not None:
-        previous = await event.client.get_messages(event.chat_id, limit=limit, max_id=event.id)
+        try:
+            # Use input_chat which is already resolved from the event, avoiding entity lookup errors
+            chat = await event.get_input_chat()
+            previous = await event.client.get_messages(chat, limit=limit, max_id=event.id)
+        except ValueError as e:
+            logger.warning("Failed to get messages for context: %s", e)
+            previous = []
         for msg in reversed(previous):  # Oldest first
             if msg and msg.message:
                 sender_entity = await msg.get_sender()
