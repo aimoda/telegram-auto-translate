@@ -562,7 +562,8 @@ async def translate_with_anthropic(
     response = await clients.anthropic_client.messages.create(
         model=config.anthropic_model,
         max_tokens=16000,
-        thinking={"type": "enabled", "budget_tokens": 10000},
+        thinking={"type": "adaptive"},
+        output_config={"effort": "max"},
         system=system_prompt,
         messages=[
             {"role": "user", "content": content},
