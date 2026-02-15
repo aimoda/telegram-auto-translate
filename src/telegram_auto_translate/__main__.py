@@ -142,7 +142,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--anthropic-model",
-        default=os.getenv("ANTHROPIC_MODEL", "global.anthropic.claude-opus-4-5-20251101-v1:0"),
+        default=os.getenv("ANTHROPIC_MODEL", "global.anthropic.claude-opus-4-6-v1"),
         help="Anthropic Bedrock model used for translation",
     )
     parser.add_argument(
