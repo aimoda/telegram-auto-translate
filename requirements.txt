@@ -1,5 +1,5 @@
-anthropic[bedrock]
-openai
-httpx[http2]
-Telethon
-azure-identity
+anthropic[bedrock]==0.79.0
+openai==2.21.0
+httpx[http2]==0.28.1
+Telethon==1.42.0
+azure-identity==1.25.2
